@@ -1,0 +1,45 @@
+name: Build CloudStream plugin
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build components
+        run: sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;34.0.0" "build-tools;35.0.0"
+
+      - name: Build plugin and repository index
+        run: ./gradlew --no-daemon makePluginsJson
+
+      - name: Prepare CloudStream repository files
+        run: |
+          mkdir -p publish
+          cp SZChannel/build/SZChannel.cs3 build/plugins.json repo.json publish/
+
+      - name: Publish to builds branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: builds
+          publish_dir: ./publish
+          force_orphan: true

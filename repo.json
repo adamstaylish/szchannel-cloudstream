@@ -1,0 +1,8 @@
+{
+  "name": "SZChannel",
+  "description": "إضافة CloudStream لموقع SZChannel",
+  "manifestVersion": 1,
+  "pluginLists": [
+    "https://raw.githubusercontent.com/adamstaylish/szchannel-cloudstream/builds/plugins.json"
+  ]
+}

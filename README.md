@@ -1,22 +1,19 @@
 # SZChannel CloudStream Provider
 
-إضافة CloudStream لموقع SZChannel، مبنية بموافقة فريق الموقع.
+مستودع إضافة CloudStream لموقع SZChannel.
 
-## التشغيل المحلي
+## البناء محليًا
 
 ```bash
-./gradlew :SZChannel:assembleRelease
+./gradlew :SZChannel:make
 ```
 
-سيظهر ملف APK للإضافة داخل:
-
-```text
-SZChannel/build/outputs/apk/release/
-```
+ينشئ Gradle ملف إضافة CloudStream بصيغة `.cs3` وملفات البيانات الوصفية داخل `SZChannel/build/`.
 
 ## ملاحظات
 
 - يعتمد المزوّد على صفحات التصنيفات وملفات JavaScript التي ينشرها الموقع لقوائم الحلقات.
 - تمرّر روابط الخوادم المعلنة في صفحة الحلقة إلى مستخرجات CloudStream.
 - عند تغيير نطاق الموقع أو محددات HTML، حدّث `mainUrl` وCSS selectors في `SZChannel.kt`.
-- للنشر كمستودع CloudStream، يجب رفع ملفات البناء إلى فرع `builds` ثم إنشاء `repo.json` يشير إلى `plugins.json`.
+- تُنشر الإضافة تلقائيًا إلى فرع `builds` عند تحديث الفرع `main`.
+- أضف رابط المستودع `https://raw.githubusercontent.com/adamstaylish/szchannel-cloudstream/builds/repo.json` إلى CloudStream.
