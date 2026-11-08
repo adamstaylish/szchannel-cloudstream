@@ -31,19 +31,7 @@ jobs:
         run: sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;34.0.0" "build-tools;35.0.0"
 
       - name: Build plugin and repository index
-        run: |
-          for attempt in 1 2 3; do
-            echo "=== Build attempt $attempt ==="
-            if ./gradlew --no-daemon makePluginsJson; then
-              echo "Build succeeded on attempt $attempt"
-              exit 0
-            fi
-            echo "Attempt $attempt failed, cleaning and retrying in 15s..."
-            ./gradlew --no-daemon --stop || true
-            sleep 15
-          done
-          echo "Build failed after 3 attempts"
-          exit 1
+        run: ./gradlew --no-daemon makePluginsJson
 
       - name: Prepare CloudStream repository files
         run: |
