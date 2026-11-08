@@ -73,3 +73,29 @@ subprojects {
 task<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
+
+// Appends a build-unique query parameter to the plugin download URL so that
+// raw.githubusercontent.com / jsDelivr never serve a stale .cs3 after a redeploy
+// (a stale file causes a fileHash mismatch and CloudStream shows "خطأ").
+val addCacheBuster by tasks.registering {
+    doLast {
+        val json = layout.buildDirectory.file("plugins.json").get().asFile
+        if (!json.exists()) {
+            println("addCacheBuster: build/plugins.json not found, skipping")
+            return@doLast
+        }
+        val tag = System.getenv("GITHUB_SHA")?.take(7) ?: System.currentTimeMillis().toString()
+        val original = json.readText()
+        val updated = original.replace(Regex("SZChannel\\.cs3(?=\")"), "SZChannel.cs3?v=$tag")
+        if (updated != original) {
+            json.writeText(updated)
+            println("addCacheBuster: applied ?v=$tag")
+        } else {
+            println("addCacheBuster: no plugin url found to rewrite")
+        }
+    }
+}
+
+tasks.matching { it.name == "makePluginsJson" }.configureEach {
+    finalizedBy(addCacheBuster)
+}
