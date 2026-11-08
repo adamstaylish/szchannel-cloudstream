@@ -1,4 +1,4 @@
-version = 1
+version = 2
 
 cloudstream {
     description = "مزود رسمي لمحتوى SZChannel المصرح به"
