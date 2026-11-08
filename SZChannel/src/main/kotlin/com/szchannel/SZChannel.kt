@@ -103,20 +103,65 @@ class SZChannel : MainAPI() {
         }
     }
 
+    /** Resolves a possibly relative link against a base URL. */
+    private fun resolveUrl(base: String, link: String): String {
+        if (link.isBlank()) return ""
+        return runCatching { java.net.URI(base).resolve(link.trim()).toString() }
+            .getOrElse { fixUrl(link.trim()) }
+    }
+
+    /** Collects every playable server link from a document. */
+    private fun serverLinks(document: org.jsoup.nodes.Document, base: String): List<String> {
+        return document.select(".servers a[href], a.ser-id[href]")
+            .map { element ->
+                val raw = element.attr("href")
+                val absolute = element.absUrl("href").ifBlank { resolveUrl(base, raw) }
+                absolute
+            }
+            .filter { it.startsWith("http://") || it.startsWith("https://") }
+            .distinct()
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val document = app.get(data, headers = requestHeaders).document
-        document.select(".servers a[href], a.ser-id[href]")
-            .map { it.absUrl("href").ifBlank { it.attr("href") } }
-            .filter { it.startsWith("http") }
-            .distinct()
-            .forEach { server ->
-                runCatching { loadExtractor(server, data, subtitleCallback, callback) }
+        // 1. Open the episode page.
+        val episodeDocument = runCatching { app.get(data, headers = requestHeaders).document }.getOrNull()
+
+        // 2. Extract iframe#iframe[src] (or the first iframe carrying a src).
+        val iframeUrl = episodeDocument?.let { document ->
+            val iframe = document.selectFirst("iframe#iframe[src]")
+                ?: document.selectFirst("iframe[src]")
+            iframe?.let { element ->
+                val raw = element.attr("src")
+                element.absUrl("src").ifBlank { resolveUrl(data, raw) }
             }
-        return true
+        }?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+
+        val servers = LinkedHashSet<String>()
+
+        // 3-5. Open the iframe page and pull the server links from it.
+        if (iframeUrl != null) {
+            val iframeDocument = runCatching { app.get(iframeUrl, headers = requestHeaders).document }.getOrNull()
+            if (iframeDocument != null) {
+                servers.addAll(serverLinks(iframeDocument, iframeUrl))
+            }
+        }
+
+        // 7. Fallback to the original episode page when the iframe fails or has no servers.
+        if (servers.isEmpty() && episodeDocument != null) {
+            servers.addAll(serverLinks(episodeDocument, data))
+        }
+
+        // 6 & 8. Pass each unique link to loadExtractor with the episode page as referer,
+        // isolating failures so one broken server cannot stop the rest.
+        servers.forEach { server ->
+            runCatching { loadExtractor(server, data, subtitleCallback, callback) }
+        }
+
+        return servers.isNotEmpty()
     }
 }
