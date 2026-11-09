@@ -3,7 +3,9 @@ package com.szchannel
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
+import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
+
 
 class SZChannel : MainAPI() {
     override var mainUrl = "https://g.szchannel.org"
@@ -69,11 +71,26 @@ class SZChannel : MainAPI() {
     }
 
     private suspend fun episodeScript(document: org.jsoup.nodes.Document): org.jsoup.nodes.Document? {
-        val script = document.select("script[src]").firstOrNull { it.attr("src").substringAfterLast('/').endsWith(".js") && !it.attr("src").contains("juy.js") && !it.attr("src").contains("fg.js") }
-            ?: return null
-        val scriptUrl = script.absUrl("src").ifBlank { fixUrl(script.attr("src")) }
-        return runCatching { app.get(scriptUrl, headers = requestHeaders).document }.getOrNull()
+    val script = document.select("script[src]").firstOrNull {
+        it.attr("src").substringAfterLast('/').endsWith(".js") &&
+            !it.attr("src").contains("juy.js") &&
+            !it.attr("src").contains("fg.js")
+    } ?: return null
+
+    val scriptUrl = script.absUrl("src").ifBlank {
+        fixUrl(script.attr("src"))
     }
+
+    return runCatching {
+        val source = app.get(scriptUrl, headers = requestHeaders).text
+        val html = source
+            .substringAfter("document.write(`", source)
+            .substringBeforeLast("`)", source)
+
+        Jsoup.parse(html, scriptUrl)
+    }.getOrNull()
+}
+
 
     override suspend fun load(url: String): LoadResponse {
         val response = app.get(url, headers = requestHeaders)
