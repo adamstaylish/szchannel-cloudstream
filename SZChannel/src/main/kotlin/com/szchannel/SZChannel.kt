@@ -50,7 +50,7 @@ class SZChannel : MainAPI() {
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        if (page > 0) return newHomePageResponse(emptyList())
+        if (page > 1) return newHomePageResponse(emptyList())
         val pages = categories.mapNotNull { (title, path) ->
             val response = runCatching { app.get(fixUrl(path), headers = requestHeaders) }.getOrNull() ?: return@mapNotNull null
             val items = listing(response.document)
