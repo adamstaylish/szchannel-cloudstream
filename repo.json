@@ -1,6 +1,6 @@
 {
   "name": "SZChannel",
-  "description": "إضافة CloudStream لموقع SZChannel",
+  "description": "إضافة CloudStream لمزوّدي SZChannel وStardima وAnimeZid وEgyDead",
   "manifestVersion": 1,
   "pluginLists": [
     "https://raw.githubusercontent.com/adamstaylish/szchannel-cloudstream/builds/plugins.json"

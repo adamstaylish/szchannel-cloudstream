@@ -7,5 +7,8 @@ import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 class SZChannelPlugin : BasePlugin() {
     override fun load() {
         registerMainAPI(SZChannel())
+        registerMainAPI(Stardima())
+        registerMainAPI(AnimeZid())
+        registerMainAPI(EgyDead())
     }
 }

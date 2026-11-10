@@ -1,10 +1,10 @@
-version = 3
+version = 4
 
 cloudstream {
-    description = "مزود رسمي لمحتوى SZChannel المصرح به"
+    description = "مزوّدو SZChannel وStardima وAnimeZid وEgyDead"
     authors = listOf("SZChannel Team")
     language = "ar"
     status = 1
-    tvTypes = listOf("TvSeries")
+    tvTypes = listOf("TvSeries", "Movie")
     iconUrl = "https://szchannel.org/favicon.ico"
 }
