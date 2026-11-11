@@ -240,7 +240,7 @@ class AnimeZid : MainAPI() {
             return newMovieLoadResponse(title, pageUrl, TvType.Movie, pageUrl) {
                 posterUrl = poster
                 plot?.let { this.plot = it }
-            }
+            }.also { MetadataUtils.apply(document, pageUrl, it) }
         }
 
         val episodes = episodesForSeries(document, pageUrl)
@@ -252,7 +252,7 @@ class AnimeZid : MainAPI() {
         ) {
             posterUrl = poster
             plot?.let { this.plot = it }
-        }
+        }.also { MetadataUtils.apply(document, pageUrl, it) }
     }
 
     override suspend fun loadLinks(

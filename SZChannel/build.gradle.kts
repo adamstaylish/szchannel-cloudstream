@@ -1,7 +1,7 @@
-version = 4
+version = 5
 
 cloudstream {
-    description = "مزوّدو SZChannel وStardima وAnimeZid وEgyDead"
+    description = "مزوّدو SZChannel وStardima وAnimeZid وEgyDead وShahiid Anime"
     authors = listOf("SZChannel Team")
     language = "ar"
     status = 1

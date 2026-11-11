@@ -10,5 +10,6 @@ class SZChannelPlugin : BasePlugin() {
         registerMainAPI(Stardima())
         registerMainAPI(AnimeZid())
         registerMainAPI(EgyDead())
+        registerMainAPI(ShahiidAnime())
     }
 }

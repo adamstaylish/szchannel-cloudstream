@@ -161,7 +161,7 @@ class Stardima : MainAPI() {
             return newMovieLoadResponse(title, pageUrl, TvType.Movie, pageUrl) {
                 posterUrl = poster
                 plot?.let { this.plot = it }
-            }
+            }.also { MetadataUtils.apply(document, pageUrl, it) }
         }
 
         val episodes = episodeLinks(document, pageUrl).mapIndexed { index, (episodeUrl, label) ->
@@ -178,7 +178,7 @@ class Stardima : MainAPI() {
         return newTvSeriesLoadResponse(title, pageUrl, TvType.TvSeries, episodes) {
             posterUrl = poster
             plot?.let { this.plot = it }
-        }
+        }.also { MetadataUtils.apply(document, pageUrl, it) }
     }
 
     override suspend fun loadLinks(
