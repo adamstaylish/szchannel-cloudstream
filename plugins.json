@@ -1,0 +1,23 @@
+[
+    {
+        "iconUrl": "https://szchannel.org/favicon.ico",
+        "fileHash": "sha256-ae03da72e47fd9d9585565316f1f814ba4fec2ef1d2828336b4ee486a4e51b40",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/adamstaylish/szchannel-cloudstream",
+        "fileSize": 71079,
+        "status": 1,
+        "language": "ar",
+        "authors": [
+            "SZChannel Team"
+        ],
+        "tvTypes": [
+            "TvSeries",
+            "Movie"
+        ],
+        "version": 5,
+        "internalName": "SZChannel",
+        "description": "\u0645\u0632\u0648\u0651\u062f\u0648 SZChannel \u0648Stardima \u0648AnimeZid \u0648EgyDead \u0648Shahiid Anime",
+        "url": "https://raw.githubusercontent.com/adamstaylish/szchannel-cloudstream/builds/SZChannel.cs3?v=3015bf7",
+        "name": "SZChannel"
+    }
+]
