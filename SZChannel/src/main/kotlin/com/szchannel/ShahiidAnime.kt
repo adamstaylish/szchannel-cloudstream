@@ -5,6 +5,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import org.json.JSONObject
 import java.net.URI
 import java.net.URLEncoder
 
@@ -205,17 +206,58 @@ class ShahiidAnime : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val pageUrl = absoluteUrl(mainUrl, data)
-        val document = runCatching { app.get(pageUrl, headers = requestHeaders).document }.getOrNull()
+        val initial = runCatching { app.get(pageUrl, headers = requestHeaders) }.getOrNull()
             ?: return false
-        val links = document.select(
+        val document = initial.document
+        val iframeLinks = document.select(
             "iframe[src], iframe[data-src], video source[src], video source[data-src]"
         ).mapNotNull { element ->
             val raw = element.attr("src").ifBlank { element.attr("data-src") }
             absoluteUrl(pageUrl, raw).takeIf { it.startsWith("http") }
-        }.distinct()
-        links.forEach { link ->
-            runCatching { loadExtractor(link, pageUrl, subtitleCallback, callback) }
+        }.toMutableList()
+
+        // Share4Max renders the player as an Inertia page. The HTML iframe only
+        // contains the player shell; its declared mirror list is returned by the
+        // official partial `streams` request below.
+        val version = Regex("\\\"version\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"")
+            .find(initial.text)?.groupValues?.getOrNull(1)
+        val streamsResponse = if (version.isNullOrBlank()) null else runCatching {
+            app.get(
+                pageUrl,
+                headers = requestHeaders + mapOf(
+                    "Referer" to pageUrl,
+                    "X-Requested-With" to "XMLHttpRequest",
+                    "X-Inertia" to "true",
+                    "X-Inertia-Version" to version,
+                    "X-Inertia-Partial-Component" to "files/mirror/video",
+                    "X-Inertia-Partial-Data" to "streams",
+                    "Accept" to "application/json, text/plain, */*"
+                )
+            ).text
+        }.getOrNull()
+
+        val mirrorLinks = mutableListOf<String>()
+        runCatching {
+            val root = JSONObject(streamsResponse.orEmpty())
+            val data = root.optJSONObject("props")
+                ?.optJSONObject("streams")
+                ?.optJSONArray("data") ?: return@runCatching
+            for (index in 0 until data.length()) {
+                val mirrors = data.optJSONObject(index)?.optJSONArray("mirrors") ?: continue
+                for (mirrorIndex in 0 until mirrors.length()) {
+                    val raw = mirrors.optJSONObject(mirrorIndex)?.optString("link").orEmpty()
+                    if (raw.isNotBlank()) mirrorLinks += absoluteUrl(pageUrl, raw)
+                }
+            }
         }
-        return links.isNotEmpty()
+
+        val allLinks = (mirrorLinks + iframeLinks).filter { it.startsWith("http") }.distinct()
+        var loaded = false
+        allLinks.forEach { link ->
+            runCatching {
+                if (loadExtractor(link, pageUrl, subtitleCallback, callback)) loaded = true
+            }
+        }
+        return loaded
     }
 }
