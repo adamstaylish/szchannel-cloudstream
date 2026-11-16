@@ -162,7 +162,12 @@ class SZChannel : MainAPI() {
 
         // 3-5. Open the iframe page and pull the server links from it.
         if (iframeUrl != null) {
-            val iframeDocument = runCatching { app.get(iframeUrl, headers = requestHeaders).document }.getOrNull()
+            val iframeDocument = runCatching {
+                app.get(
+                    iframeUrl,
+                    headers = requestHeaders + ("Referer" to data)
+                ).document
+            }.getOrNull()
             if (iframeDocument != null) {
                 servers.addAll(serverLinks(iframeDocument, iframeUrl))
             }
@@ -173,10 +178,11 @@ class SZChannel : MainAPI() {
             servers.addAll(serverLinks(episodeDocument, data))
         }
 
-        // 6 & 8. Pass each unique link to loadExtractor with the episode page as referer,
-        // isolating failures so one broken server cannot stop the rest.
+        // 6 & 8. Pass each link with the embed page as referer. Providers such as
+        // Vidmoly reject the request when the original episode page is used.
+        val extractorReferer = iframeUrl ?: data
         servers.forEach { server ->
-            runCatching { loadExtractor(server, data, subtitleCallback, callback) }
+            runCatching { loadExtractor(server, extractorReferer, subtitleCallback, callback) }
         }
 
         return servers.isNotEmpty()
