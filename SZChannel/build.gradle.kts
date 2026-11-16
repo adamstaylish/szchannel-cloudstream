@@ -1,4 +1,4 @@
-version = 5
+version = 6
 
 cloudstream {
     description = "مزوّدو SZChannel وStardima وAnimeZid وEgyDead وShahiid Anime"

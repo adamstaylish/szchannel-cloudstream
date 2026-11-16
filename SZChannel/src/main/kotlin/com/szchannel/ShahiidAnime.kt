@@ -68,20 +68,48 @@ class ShahiidAnime : MainAPI() {
             ?: anchor.text().trim()
 
     private fun isContentUrl(url: String): Boolean {
+        val uri = runCatching { URI(url) }.getOrNull() ?: return false
+        val host = uri.host.orEmpty().lowercase()
+        if (host != "shahiid-anime.net" && host != "www.shahiid-anime.net") return false
+        val path = uri.path.lowercase()
+        return listOf(
+            "/anime/", "/episodes/", "/episodesdubbed/",
+            "/series/", "/seriesdubbed/", "/seasons/", "/seasonsdubbed/"
+        ).any { path.startsWith(it) }
+    }
+
+    private fun isListingUrl(url: String): Boolean =
+        pathOf(url).trimEnd('/') in setOf(
+            "/anime", "/episodes", "/episodesdubbed",
+            "/series", "/seriesdubbed", "/seasons", "/seasonsdubbed"
+        )
+
+    private fun isEpisodeUrl(url: String): Boolean {
         val path = pathOf(url)
-        return path.contains("/anime/") || path.contains("/episodes/") ||
-            path.contains("/series/") || path.contains("/seasons/")
+        return path.startsWith("/episodes/") || path.startsWith("/episodesdubbed/")
+    }
+
+    private fun isSeasonUrl(url: String): Boolean {
+        val path = pathOf(url)
+        return path.startsWith("/seasons/") || path.startsWith("/seasonsdubbed/")
     }
 
     private fun cards(document: Document, pageUrl: String): List<SearchResponse> {
-        return document.select("a[href]").mapNotNull { anchor ->
+        val posterCards = document.select(".one-poster")
+        val candidates = if (posterCards.isNotEmpty()) posterCards.toList() else document.select("a[href]").toList()
+        return candidates.mapNotNull { card ->
+            val anchor = card.select("a[href]").firstOrNull { candidate ->
+                val candidateUrl = candidate.absUrl("href")
+                    .ifBlank { absoluteUrl(pageUrl, candidate.attr("href")) }
+                isContentUrl(candidateUrl) && !isListingUrl(candidateUrl)
+            } ?: return@mapNotNull null
             val url = anchor.absUrl("href").ifBlank { absoluteUrl(pageUrl, anchor.attr("href")) }
-            if (url.isBlank() || !isContentUrl(url) || url == mainUrl || url.endsWith("/anime/") ||
-                url.endsWith("/series/") || url.endsWith("/episodes/")) return@mapNotNull null
-            val title = cardTitle(anchor).ifBlank { return@mapNotNull null }
-            val poster = imageOf(anchor, pageUrl)
+            if (url.isBlank()) return@mapNotNull null
+            val title = cardTitle(card).ifBlank { cardTitle(anchor) }
+                .ifBlank { return@mapNotNull null }
+            val poster = imageOf(card, pageUrl) ?: imageOf(anchor, pageUrl)
             val path = pathOf(url)
-            if (path.contains("/anime/")) {
+            if (path.startsWith("/anime/")) {
                 newMovieSearchResponse(title, url) {
                     posterUrl = poster
                     posterHeaders = requestHeaders
@@ -132,9 +160,9 @@ class ShahiidAnime : MainAPI() {
             .find(text)?.groupValues?.getOrNull(1)?.toIntOrNull()
 
     private fun episodeLinks(document: Document, pageUrl: String): List<Episode> =
-        document.select("a[href*='/episodes/']").mapNotNull { anchor ->
+        document.select("a[href]").mapNotNull { anchor ->
             val url = anchor.absUrl("href").ifBlank { absoluteUrl(pageUrl, anchor.attr("href")) }
-            if (url.isBlank()) return@mapNotNull null
+            if (url.isBlank() || !isContentUrl(url) || !isEpisodeUrl(url)) return@mapNotNull null
             val label = anchor.text().trim().ifBlank { anchor.attr("title").trim() }
             newEpisode(url) {
                 name = label.ifBlank { "الحلقة" }
@@ -145,9 +173,9 @@ class ShahiidAnime : MainAPI() {
         }.distinctBy { it.data }
 
     private fun seasonLinks(document: Document, pageUrl: String): List<String> =
-        document.select("a[href*='/seasons/']").mapNotNull { anchor ->
+        document.select("a[href]").mapNotNull { anchor ->
             val url = anchor.absUrl("href").ifBlank { absoluteUrl(pageUrl, anchor.attr("href")) }
-            url.takeIf { it.isNotBlank() }
+            url.takeIf { it.isNotBlank() && isContentUrl(it) && isSeasonUrl(it) }
         }.distinct()
 
     private fun firstNumber(document: Document, pattern: Regex): Int? =
@@ -173,7 +201,7 @@ class ShahiidAnime : MainAPI() {
         val document = app.get(pageUrl, headers = requestHeaders).document
         val title = pageTitle(document)
         val path = pathOf(pageUrl)
-        if (path.contains("/anime/")) {
+        if (path.startsWith("/anime/")) {
             return newMovieLoadResponse(title, pageUrl, TvType.Movie, pageUrl).also {
                 applyMetadata(document, pageUrl, it)
             }
@@ -188,7 +216,7 @@ class ShahiidAnime : MainAPI() {
                 }
             }
         }
-        if (episodes.isEmpty() && path.contains("/episodes/")) {
+        if (episodes.isEmpty() && isEpisodeUrl(pageUrl)) {
             episodes.add(newEpisode(pageUrl) {
                 name = title
                 episode = episodeNumber(title)
@@ -209,53 +237,64 @@ class ShahiidAnime : MainAPI() {
         val initial = runCatching { app.get(pageUrl, headers = requestHeaders) }.getOrNull()
             ?: return false
         val document = initial.document
-        val iframeLinks = document.select(
-            "iframe[src], iframe[data-src], video source[src], video source[data-src]"
-        ).mapNotNull { element ->
-            val raw = element.attr("src").ifBlank { element.attr("data-src") }
+        val iframeLinks = document.select("iframe[src], iframe[data-src]").mapNotNull { element ->
+            val raw = element.attr("data-src").ifBlank { element.attr("src") }
             absoluteUrl(pageUrl, raw).takeIf { it.startsWith("http") }
         }.toMutableList()
+        val mediaLinks = document.select("video source[src], video source[data-src]").mapNotNull { element ->
+            val raw = element.attr("src").ifBlank { element.attr("data-src") }
+            absoluteUrl(pageUrl, raw).takeIf { it.startsWith("http") }
+        }
 
-        // Share4Max renders the player as an Inertia page. The HTML iframe only
-        // contains the player shell; its declared mirror list is returned by the
-        // official partial `streams` request below.
-        val version = Regex("\\\"version\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"")
-            .find(initial.text)?.groupValues?.getOrNull(1)
-        val streamsResponse = if (version.isNullOrBlank()) null else runCatching {
-            app.get(
-                pageUrl,
-                headers = requestHeaders + mapOf(
-                    "Referer" to pageUrl,
-                    "X-Requested-With" to "XMLHttpRequest",
-                    "X-Inertia" to "true",
-                    "X-Inertia-Version" to version,
-                    "X-Inertia-Partial-Component" to "files/mirror/video",
-                    "X-Inertia-Partial-Data" to "streams",
-                    "Accept" to "application/json, text/plain, */*"
-                )
-            ).text
-        }.getOrNull()
+        // Share4Max's iframe page is an Inertia page; its public streams prop
+        // lists the mirrors. Read the version and request that prop from the
+        // iframe URL, not from the parent Shahiid episode page.
+        val candidates = mutableListOf<Pair<String, String>>()
+        mediaLinks.forEach { candidates.add(it to pageUrl) }
+        iframeLinks.forEach { playerUrl ->
+            candidates.add(playerUrl to pageUrl)
+            val playerPage = runCatching {
+                app.get(playerUrl, headers = requestHeaders + ("Referer" to pageUrl))
+            }.getOrNull() ?: return@forEach
+            val version = Regex("\\\"version\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"")
+                .find(playerPage.text)?.groupValues?.getOrNull(1)
+                ?: return@forEach
+            val streamsResponse = runCatching {
+                app.get(
+                    playerUrl,
+                    headers = requestHeaders + mapOf(
+                        "Referer" to playerUrl,
+                        "X-Requested-With" to "XMLHttpRequest",
+                        "X-Inertia" to "true",
+                        "X-Inertia-Version" to version,
+                        "X-Inertia-Partial-Component" to "files/mirror/video",
+                        "X-Inertia-Partial-Data" to "streams",
+                        "Accept" to "application/json, text/plain, */*"
+                    )
+                ).text
+            }.getOrNull() ?: return@forEach
 
-        val mirrorLinks = mutableListOf<String>()
-        runCatching {
-            val root = JSONObject(streamsResponse.orEmpty())
-            val data = root.optJSONObject("props")
-                ?.optJSONObject("streams")
-                ?.optJSONArray("data") ?: return@runCatching
-            for (index in 0 until data.length()) {
-                val mirrors = data.optJSONObject(index)?.optJSONArray("mirrors") ?: continue
-                for (mirrorIndex in 0 until mirrors.length()) {
-                    val raw = mirrors.optJSONObject(mirrorIndex)?.optString("link").orEmpty()
-                    if (raw.isNotBlank()) mirrorLinks += absoluteUrl(pageUrl, raw)
+            runCatching {
+                val root = JSONObject(streamsResponse)
+                val data = root.optJSONObject("props")
+                    ?.optJSONObject("streams")
+                    ?.optJSONArray("data") ?: return@runCatching
+                for (index in 0 until data.length()) {
+                    val mirrors = data.optJSONObject(index)?.optJSONArray("mirrors") ?: continue
+                    for (mirrorIndex in 0 until mirrors.length()) {
+                        val raw = mirrors.optJSONObject(mirrorIndex)?.optString("link").orEmpty()
+                        if (raw.isNotBlank()) {
+                            candidates.add(absoluteUrl(playerUrl, raw) to playerUrl)
+                        }
+                    }
                 }
             }
         }
 
-        val allLinks = (mirrorLinks + iframeLinks).filter { it.startsWith("http") }.distinct()
         var loaded = false
-        allLinks.forEach { link ->
+        candidates.distinctBy { it.first }.forEach { (link, referer) ->
             runCatching {
-                if (loadExtractor(link, pageUrl, subtitleCallback, callback)) loaded = true
+                if (loadExtractor(link, referer, subtitleCallback, callback)) loaded = true
             }
         }
         return loaded
